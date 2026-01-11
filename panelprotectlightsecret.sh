@@ -225,7 +225,7 @@ admin_protection_setup() {
     fi
     
     # Download and execute the protection script
-    bash <(curl -s https://raw.githubusercontent.com/KiwamiXq1031/installer-premium/main/protectadmin.sh)
+    bash <(curl -s https://raw.githubusercontent.com/axelvers4-cmd/installer-premium/main/protectadmin.sh)
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Admin Protection Setup selesai.${RESET}"
