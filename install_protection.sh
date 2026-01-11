@@ -79,7 +79,7 @@ class ServerDeletionService
                 }
 
                 if ($ownerId !== $user->id) {
-                    throw new DisplayException('Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+                    throw new DisplayException('Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
                 }
             }
             // jika $user->id === 1, lanjutkan (admin super)
@@ -234,7 +234,7 @@ class UserController extends Controller
     {
         // === FITUR TAMBAHAN: Proteksi hapus user ===
         if ($request->user()->id !== 1) {
-            throw new DisplayException("Maaf, Anda tidak memiliki izin untuk membuka server ini.");
+            throw new DisplayException("Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.");
         }
         // ============================================
 
@@ -274,13 +274,13 @@ class UserController extends Controller
 
         foreach ($restrictedFields as $field) {
             if ($request->filled($field) && $request->user()->id !== 1) {
-                throw new DisplayException("Maaf, Anda tidak memiliki izin untuk membuka server ini.");
+                throw new DisplayException("Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.");
             }
         }
 
         // Cegah turunkan level admin ke user biasa
         if ($user->root_admin && $request->user()->id !== 1) {
-            throw new DisplayException("Maaf, Anda tidak memiliki izin untuk membuka server ini.");
+            throw new DisplayException("Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.");
         }
         // ====================================================
 
@@ -379,7 +379,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
         }
 
         return $this->view->make('admin.locations.index', [
@@ -397,7 +397,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
         }
 
         return $this->view->make('admin.locations.view', [
@@ -415,7 +415,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
         }
 
         $location = $this->creationService->handle($request->normalize());
@@ -434,7 +434,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
         }
 
         if ($request->input('action') === 'delete') {
@@ -458,7 +458,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
         }
 
         try {
@@ -525,7 +525,7 @@ class NodeController extends Controller
         // === ðŸ”’ FITUR TAMBAHAN: Anti akses selain admin ID 1 ===
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
         }
         // ======================================================
 
@@ -605,7 +605,7 @@ class NestController extends Controller
         // ðŸ”’ Proteksi: hanya user ID 1 (superadmin) yang bisa akses menu Nest
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
         }
 
         return $this->view->make('admin.nests.index', [
@@ -738,7 +738,7 @@ class IndexController extends Controller
         // ðŸ”’ Anti akses menu Settings selain user ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
         }
 
         return $this->view->make('admin.settings.index', [
@@ -758,7 +758,7 @@ class IndexController extends Controller
         // ðŸ”’ Anti akses update settings selain user ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
         }
 
         foreach ($request->normalize() as $key => $value) {
@@ -846,7 +846,7 @@ class FileController extends ClientApiController
 
         // Jika server bukan milik user, tolak akses
         if ($server->owner_id !== $user->id) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Dilarang memodifikasi atau merusak file ini tanpa izin.');
         }
     }
 
@@ -1101,7 +1101,7 @@ class ServerController extends ClientApiController
         $authUser = Auth::user();
 
         if ($authUser->id !== 1 && (int) $server->owner_id !== (int) $authUser->id) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
         }
 
         return $this->fractal->item($server)
@@ -1169,7 +1169,7 @@ class DetailsModificationService
         // ðŸš« Batasi akses hanya untuk user ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Maaf, Anda tidak memiliki izin untuk membuka server ini.');
+            abort(403, 'Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
         }
 
         return $this->connection->transaction(function () use ($data, $server) {
