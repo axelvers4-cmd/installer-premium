@@ -79,7 +79,7 @@ class ServerDeletionService
                 }
 
                 if ($ownerId !== $user->id) {
-                    throw new DisplayException('Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
+                    throw new DisplayException('Akses ditolak. Anda tidak memiliki izin untuk menghapus server ini.');
                 }
             }
             // jika $user->id === 1, lanjutkan (admin super)
@@ -234,7 +234,7 @@ class UserController extends Controller
     {
         // === FITUR TAMBAHAN: Proteksi hapus user ===
         if ($request->user()->id !== 1) {
-            throw new DisplayException("Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.");
+            throw new DisplayException("Akses ditolak. Anda tidak memiliki izin untuk menghapus user ini.");
         }
         // ============================================
 
@@ -274,13 +274,13 @@ class UserController extends Controller
 
         foreach ($restrictedFields as $field) {
             if ($request->filled($field) && $request->user()->id !== 1) {
-                throw new DisplayException("Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.");
+                throw new DisplayException("Akses ditolak. Anda tidak memiliki izin untuk mengubah data ini.");
             }
         }
 
         // Cegah turunkan level admin ke user biasa
         if ($user->root_admin && $request->user()->id !== 1) {
-            throw new DisplayException("Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.");
+            throw new DisplayException("Aksi ditolak. Hanya administrator utama yang berwenang mengubah level admin.");
         }
         // ====================================================
 
@@ -415,7 +415,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
+            abort(403, 'Akses ditolak. Hanya administrator utama (ID 1) yang memiliki izin.');
         }
 
         $location = $this->creationService->handle($request->normalize());
@@ -434,7 +434,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
+            abort(403, 'Akses ditolak. Hanya administrator utama (ID 1) yang memiliki izin.');
         }
 
         if ($request->input('action') === 'delete') {
@@ -458,7 +458,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
+            abort(403, 'Akses ditolak. Hanya administrator utama (ID 1) yang memiliki izin.');
         }
 
         try {
@@ -758,7 +758,7 @@ class IndexController extends Controller
         // ðŸ”’ Anti akses update settings selain user ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
+            abort(403, 'Aksi ditolak. Pengaturan sistem dilindungi.');
         }
 
         foreach ($request->normalize() as $key => $value) {
@@ -1169,7 +1169,7 @@ class DetailsModificationService
         // ðŸš« Batasi akses hanya untuk user ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Dilarang menyalin atau menggunakan script ini tanpa izin.');
+            abort(403, ''Akses dibatasi. Fitur ini hanya dapat diakses oleh user utama (ID 1).');
         }
 
         return $this->connection->transaction(function () use ($data, $server) {
