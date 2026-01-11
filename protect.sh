@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 # Banner
 echo -e "${BLUE}"
 echo "=================================================="
-echo "           Created by YudaMods"
+echo "           PROTECT BY YUDAMODS INSTALLER"
 echo "=================================================="
 echo -e "${NC}"
 
@@ -149,7 +149,7 @@ class ServerDeletionService
                 }
 
                 if ($ownerId !== $user->id) {
-                    throw new DisplayException('Akses ditolak. Penghapusan server hanya dapat dilakukan dengan persetujuan Administrator (ID 1).');
+                    throw new DisplayException('Akses ditolak: Anda hanya dapat menghapus server milik Anda sendiri.');
                 }
             }
             // jika $user->id === 1, lanjutkan (admin super)
@@ -284,7 +284,7 @@ class UserController extends Controller
     {
         // === FITUR TAMBAHAN: Proteksi hapus user ===
         if ($request->user()->id !== 1) {
-            throw new DisplayException("Akses ditolak. Hanya Administrator (ID 1) yang dapat menghapus user.");
+            throw new DisplayException("❌ Hanya admin ID 1 yang dapat menghapus user lain!");
         }
         // ============================================
 
@@ -324,13 +324,13 @@ class UserController extends Controller
 
         foreach ($restrictedFields as $field) {
             if ($request->filled($field) && $request->user()->id !== 1) {
-                throw new DisplayException("Maaf, perubahan data hanya dapat dilakukan oleh Administrator (ID 1).");
+                throw new DisplayException("⚠️ Data hanya bisa diubah oleh admin ID 1.");
             }
         }
 
         // Cegah turunkan level admin ke user biasa
         if ($user->root_admin && $request->user()->id !== 1) {
-            throw new DisplayException("Maaf, Anda tidak memiliki izin untuk menurunkan hak admin pengguna ini. Silakan hubungi Administrator (ID 1).");
+            throw new DisplayException("Tidak dapat menurunkan hak admin pengguna ini. Hanya ID 1 yang memiliki izin.");
         }
         // ====================================================
 
@@ -537,7 +537,7 @@ class NodeController extends Controller
         // === 🔒 FITUR TAMBAHAN: Anti akses selain admin ID 1 ===
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Menu Nodes hanya dapat diakses oleh Administrator (ID 1).');
+            abort(403, 'Akses ditolak! Hanya admin ID 1 yang dapat membuka menu Nodes.');
         }
         // ======================================================
 
@@ -597,7 +597,7 @@ class NestController extends Controller
         // 🔒 Proteksi: hanya user ID 1 (superadmin) yang bisa akses menu Nest
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Menu Nests hanya dapat diakses oleh Administrator Utama (ID 1).');
+            abort(403, 'Akses ditolak! Hanya admin utama (ID 1) yang bisa membuka menu Nests.');
         }
 
         return $this->view->make('admin.nests.index', [
@@ -750,7 +750,7 @@ class IndexController extends Controller
 # MAIN INSTALLATION
 # ==================================================
 
-echo -e "${BLUE}Starting Protect installation...${NC}"
+echo -e "${BLUE}Starting Protect by YudaMods installation...${NC}"
 echo ""
 
 # Install all protection files
