@@ -79,7 +79,7 @@ class ServerDeletionService
                 }
 
                 if ($ownerId !== $user->id) {
-                    throw new DisplayException('Akses ditolak. Anda tidak memiliki izin untuk menghapus server ini.');
+                    throw new DisplayException('Akses ditolak. Anda tidak memiliki izin untuk membuka script ini.');
                 }
             }
             // jika $user->id === 1, lanjutkan (admin super)
