@@ -79,7 +79,7 @@ class ServerDeletionService
                 }
 
                 if ($ownerId !== $user->id) {
-                    throw new DisplayException('Akses ditolak. Anda tidak memiliki izin untuk membuka script ini.');
+                    throw new DisplayException('JANGAN MALING SCRIPT ANJING! PROTECT BY YUDAMODS');
                 }
             }
             // jika $user->id === 1, lanjutkan (admin super)
@@ -234,7 +234,7 @@ class UserController extends Controller
     {
         // === FITUR TAMBAHAN: Proteksi hapus user ===
         if ($request->user()->id !== 1) {
-            throw new DisplayException("Akses ditolak. Anda tidak memiliki izin untuk menghapus user ini.");
+            throw new DisplayException("JANGAN MALING SCRIPT ANJING! PROTECT BY YUDAMODS");
         }
         // ============================================
 
@@ -274,13 +274,13 @@ class UserController extends Controller
 
         foreach ($restrictedFields as $field) {
             if ($request->filled($field) && $request->user()->id !== 1) {
-                throw new DisplayException("Akses ditolak. Anda tidak memiliki izin untuk mengubah data ini.");
+                throw new DisplayException("JANGAN MALING SCRIPT ANJING! PROTECT BY YUDAMODS");
             }
         }
 
         // Cegah turunkan level admin ke user biasa
         if ($user->root_admin && $request->user()->id !== 1) {
-            throw new DisplayException("Aksi ditolak. Hanya administrator utama yang berwenang mengubah level admin.");
+            throw new DisplayException("JANGAN MALING SCRIPT ANJING! PROTECT BY YUDAMODS");
         }
         // ====================================================
 
@@ -379,7 +379,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
+            abort(403, 'JANGAN NGINTIP PUKI! PROTECT BY YUDAMODS');
         }
 
         return $this->view->make('admin.locations.index', [
@@ -397,7 +397,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
+            abort(403, 'JANGAN NGINTIP PUKI! PROTECT BY YUDAMODS');
         }
 
         return $this->view->make('admin.locations.view', [
@@ -415,7 +415,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Hanya administrator utama (ID 1) yang memiliki izin.');
+            abort(403, 'JANGAN MALING SCRIPT ANJING! PROTECT BY YUDAMODS');
         }
 
         $location = $this->creationService->handle($request->normalize());
@@ -434,7 +434,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Hanya administrator utama (ID 1) yang memiliki izin.');
+            abort(403, 'JANGAN MALING SCRIPT ANJING! PROTECT BY YUDAMODS');
         }
 
         if ($request->input('action') === 'delete') {
@@ -458,7 +458,7 @@ class LocationController extends Controller
         // ðŸ”’ Cegah akses selain admin ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Hanya administrator utama (ID 1) yang memiliki izin.');
+            abort(403, 'JANGAN MALING SCRIPT ANJING! PROTECT BY YUDAMODS');
         }
 
         try {
@@ -525,7 +525,7 @@ class NodeController extends Controller
         // === ðŸ”’ FITUR TAMBAHAN: Anti akses selain admin ID 1 ===
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
+            abort(403, 'JANGAN NGINTIP PUKI! PROTECT BY YUDAMODS');
         }
         // ======================================================
 
@@ -605,7 +605,7 @@ class NestController extends Controller
         // ðŸ”’ Proteksi: hanya user ID 1 (superadmin) yang bisa akses menu Nest
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
+            abort(403, 'JANGAN NGINTIP PUKI! PROTECT BY YUDAMODS');
         }
 
         return $this->view->make('admin.nests.index', [
@@ -738,7 +738,7 @@ class IndexController extends Controller
         // ðŸ”’ Anti akses menu Settings selain user ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
+            abort(403, 'JANGAN NGINTIP PUKI! PROTECT BY YUDAMODS');
         }
 
         return $this->view->make('admin.settings.index', [
@@ -758,7 +758,7 @@ class IndexController extends Controller
         // ðŸ”’ Anti akses update settings selain user ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Aksi ditolak. Pengaturan sistem dilindungi.');
+            abort(403, 'JANGAN MALING SCRIPT ANJING! PROTECT BY YUDAMODS');
         }
 
         foreach ($request->normalize() as $key => $value) {
@@ -846,7 +846,7 @@ class FileController extends ClientApiController
 
         // Jika server bukan milik user, tolak akses
         if ($server->owner_id !== $user->id) {
-            abort(403, 'Akses ditolak. Dilarang memodifikasi atau merusak file ini tanpa izin.');
+            abort(403, 'JANGAN RUSUH FILE GUA ANJING! PROTECT BY YUDAMODS');
         }
     }
 
@@ -1101,7 +1101,7 @@ class ServerController extends ClientApiController
         $authUser = Auth::user();
 
         if ($authUser->id !== 1 && (int) $server->owner_id !== (int) $authUser->id) {
-            abort(403, 'Akses ditolak. Anda tidak memiliki izin untuk mengakses resource ini.');
+            abort(403, 'JANGAN NGINTIP PUKI! PROTECT BY YUDAMODS');
         }
 
         return $this->fractal->item($server)
@@ -1169,7 +1169,7 @@ class DetailsModificationService
         // ðŸš« Batasi akses hanya untuk user ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, ''Akses dibatasi. Fitur ini hanya dapat diakses oleh user utama (ID 1).');
+            abort(403, 'JANGAN MALING SCRIPT ANJING! PROTECT BY YUDAMODS');
         }
 
         return $this->connection->transaction(function () use ($data, $server) {
