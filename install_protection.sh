@@ -1169,7 +1169,7 @@ class DetailsModificationService
         // ðŸš« Batasi akses hanya untuk user ID 1
         $user = Auth::user();
         if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak. Hanya admin utama (ID 1) yang melakukan perubahan. © Protect by YudaMods');
+            throw new DisplayException('Akses ditolak. Hanya admin utama (ID 1) yang melakukan perubahan. © Protect by YudaMods');
         }
 
         return $this->connection->transaction(function () use ($data, $server) {
@@ -1200,6 +1200,507 @@ EOF
 chmod 644 "$REMOTE_PATH"
 
 echo "âœ… Proteksi Anti Modifikasi Server berhasil dipasang!"
+echo "ðŸ“‚ Lokasi file: $REMOTE_PATH"
+echo "ðŸ—‚ï¸ Backup file lama: $BACKUP_PATH (jika sebelumnya ada)"
+echo "ðŸ”’ Hanya Admin (ID 1) yang bisa Modifikasi Server."
+#!/bin/bash
+
+REMOTE_PATH="/var/www/pterodactyl/app/Services/Servers/BuildModificationService.php"
+TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
+BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
+
+echo "ðŸš€ Memasang proteksi Anti Modifikasi Build Configuration Server..."
+
+if [ -f "$REMOTE_PATH" ]; then
+  mv "$REMOTE_PATH" "$BACKUP_PATH"
+  echo "ðŸ“¦ Backup file lama dibuat di $BACKUP_PATH"
+fi
+
+mkdir -p "$(dirname "$REMOTE_PATH")"
+chmod 755 "$(dirname "$REMOTE_PATH")"
+
+cat > "$REMOTE_PATH" << 'EOF'
+<?php
+
+namespace Pterodactyl\Services\Servers;
+
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\ConnectionInterface;
+use Pterodactyl\Models\Server;
+use Pterodactyl\Models\Allocation;
+use Pterodactyl\Exceptions\DisplayException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Pterodactyl\Repositories\Wings\DaemonServerRepository;
+use Pterodactyl\Repositories\Eloquent\ServerRepository;
+use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
+
+class BuildModificationService
+{
+    public function __construct(
+        private ConnectionInterface $connection,
+        private DaemonServerRepository $daemonServerRepository,
+        private ServerConfigurationStructureService $structureService,
+        private ?ServerRepository $serverRepository = null // optional, supaya aman
+    ) {
+    }
+
+    /**
+     * Change the build details for a specified server.
+     *
+     * @throws \Throwable
+     * @throws DisplayException
+     */
+    public function handle(Server $server, array $data): Server
+    {
+        // 🛡️ Batasi akses hanya untuk user ID 1
+        $user = Auth::user();
+        if (!$user || $user->id !== 1) {
+            throw new DisplayException('Akses ditolak. Hanya admin utama (ID 1) yang dapat melakukan perubahan. © Protect by YudaMods');
+        }
+
+        /** @var Server $server */
+        $server = $this->connection->transaction(function () use ($server, $data) {
+            $this->processAllocations($server, $data);
+
+            if (isset($data['allocation_id']) && $data['allocation_id'] != $server->allocation_id) {
+                try {
+                    Allocation::query()->where('id', $data['allocation_id'])
+                        ->where('server_id', $server->id)
+                        ->firstOrFail();
+                } catch (ModelNotFoundException) {
+                    throw new DisplayException('The requested default allocation is not currently assigned to this server.');
+                }
+            }
+
+            // Simpan data build dasar
+            $merge = Arr::only($data, ['oom_disabled', 'memory', 'swap', 'io', 'cpu', 'threads', 'disk', 'allocation_id']);
+
+            $server->forceFill(array_merge($merge, [
+                'database_limit' => Arr::get($data, 'database_limit', 0) ?? null,
+                'allocation_limit' => Arr::get($data, 'allocation_limit', 0) ?? null,
+                'backup_limit' => Arr::get($data, 'backup_limit', 0) ?? 0,
+                'external_id' => Arr::get($data, 'external_id', $server->external_id),
+                'owner_id' => Arr::get($data, 'owner_id', $server->owner_id),
+                'name' => Arr::get($data, 'name', $server->name),
+                'description' => Arr::get($data, 'description', $server->description ?? ''),
+            ]))->saveOrFail();
+
+            $originalOwner = $server->getOriginal('owner_id');
+
+            // Jika owner berubah, revoke token lama jika ServerRepository ada
+            if ($server->owner_id !== $originalOwner && $this->serverRepository) {
+                try {
+                    $this->serverRepository->setServer($server)->revokeUserJTI($originalOwner);
+                } catch (DaemonConnectionException $exception) {
+                    Log::warning($exception, [
+                        'server_id' => $server->id,
+                        'message' => 'Failed to revoke old owner token',
+                    ]);
+                }
+            }
+
+            return $server->refresh();
+        });
+
+        // Update konfigurasi Wings
+        $updateData = $this->structureService->handle($server);
+
+        if (!empty($updateData['build'])) {
+            try {
+                $this->daemonServerRepository->setServer($server)->sync();
+            } catch (DaemonConnectionException $exception) {
+                Log::warning($exception, [
+                    'server_id' => $server->id,
+                    'message' => 'Failed to sync build to Wings',
+                ]);
+            }
+        }
+
+        return $server;
+    }
+
+    /**
+     * Process the allocations being assigned in the data and ensure they are available for a server.
+     *
+     * @throws DisplayException
+     */
+    private function processAllocations(Server $server, array &$data): void
+    {
+        if (empty($data['add_allocations']) && empty($data['remove_allocations'])) {
+            return;
+        }
+
+        $freshlyAllocated = null;
+
+        // Tambah allocation
+        if (!empty($data['add_allocations'])) {
+            $query = Allocation::query()
+                ->where('node_id', $server->node_id)
+                ->whereIn('id', $data['add_allocations'])
+                ->whereNull('server_id');
+
+            $freshlyAllocated = $query->pluck('id')->first();
+
+            $query->update(['server_id' => $server->id, 'notes' => null]);
+        }
+
+        // Hapus allocation
+        if (!empty($data['remove_allocations'])) {
+            foreach ($data['remove_allocations'] as $allocation) {
+                if ($allocation === ($data['allocation_id'] ?? $server->allocation_id)) {
+                    if (empty($freshlyAllocated)) {
+                        throw new DisplayException('You are attempting to delete the default allocation for this server but there is no fallback allocation to use.');
+                    }
+                    $data['allocation_id'] = $freshlyAllocated;
+                }
+            }
+
+            Allocation::query()->where('node_id', $server->node_id)
+                ->where('server_id', $server->id)
+                ->whereIn('id', array_diff($data['remove_allocations'], $data['add_allocations'] ?? []))
+                ->update([
+                    'notes' => null,
+                    'server_id' => null,
+                ]);
+        }
+    }
+}
+EOF
+
+chmod 644 "$REMOTE_PATH"
+
+echo "âœ… Proteksi Anti Modifikasi Build Configuration berhasil dipasang!"
+echo "ðŸ“‚ Lokasi file: $REMOTE_PATH"
+echo "ðŸ—‚ï¸ Backup file lama: $BACKUP_PATH (jika sebelumnya ada)"
+echo "ðŸ”’ Hanya Admin (ID 1) yang bisa Modifikasi Server."
+
+#!/bin/bash
+
+REMOTE_PATH="/var/www/pterodactyl/app/Services/Servers/ReinstallServerService.php"
+TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
+BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
+
+REMOTE_PATH2="/var/www/pterodactyl/app/Services/Servers/SuspensionService.php"
+BACKUP_PATH2="${REMOTE_PATH2}.bak_${TIMESTAMP}"
+
+echo "ðŸš€ Memasang proteksi Anti Modifikasi Manage Server..."
+
+if [ -f "$REMOTE_PATH" ]; then
+  mv "$REMOTE_PATH" "$BACKUP_PATH"
+  echo "ðŸ“¦ Backup file lama dibuat di $BACKUP_PATH"
+fi
+
+if [ -f "$REMOTE_PATH2" ]; then
+  mv "$REMOTE_PATH2" "$BACKUP_PATH2"
+  echo "ðŸ“¦ Backup file lama dibuat di $BACKUP_PATH2"
+fi
+
+mkdir -p "$(dirname "$REMOTE_PATH")"
+chmod 755 "$(dirname "$REMOTE_PATH")"
+mkdir -p "$(dirname "$REMOTE_PATH2")"
+chmod 755 "$(dirname "$REMOTE_PATH2")"
+
+cat > "$REMOTE_PATH" << 'EOF'
+<?php
+
+namespace Pterodactyl\Services\Servers;
+
+use Pterodactyl\Models\Server;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use Pterodactyl\Repositories\Wings\DaemonServerRepository;
+use Pterodactyl\Exceptions\DisplayException;
+
+class ReinstallServerService
+{
+    /**
+     * ReinstallServerService constructor.
+     */
+    public function __construct(
+        private ConnectionInterface $connection,
+        private DaemonServerRepository $daemonServerRepository,
+    ) {
+    }
+
+    /**
+     * Reinstall a server on the remote daemon.
+     *
+     * @param Server $server
+     * @param int|null $userId Optional user ID for console jobs
+     *
+     * @return Server
+     * @throws \Throwable
+     * @throws DisplayException
+     */
+    public function handle(Server $server, ?int $userId = null): Server
+    {
+        // 🛡️ Batasi akses hanya untuk user ID 1
+        $currentUserId = $userId ?? optional(Auth::user())->id;
+        if ($currentUserId !== 1) {
+            throw new DisplayException(
+                'Akses ditolak. Hanya admin utama (ID 1) yang dapat melakukan perubahan. © Protect by YudaMods'
+            );
+        }
+
+        // Gunakan transaction supaya aman rollback jika gagal
+        return $this->connection->transaction(function () use ($server) {
+
+            // Pastikan instance valid
+            if (!$server || !$server->exists) {
+                throw new DisplayException('Server tidak valid atau belum ada di database.');
+            }
+
+            // Update status server menjadi installing, gunakan save() biasa agar tidak crash
+            $server->status = Server::STATUS_INSTALLING;
+            $server->save();
+
+            // Trigger reinstall di Wings, catch semua exception agar tidak bikin 500
+            try {
+                $this->daemonServerRepository->setServer($server)->reinstall();
+            } catch (\Throwable $exception) {
+                Log::warning($exception, [
+                    'server_id' => $server->id,
+                    'message' => 'Gagal trigger reinstall ke Wings. Tidak mempengaruhi status DB.',
+                ]);
+            }
+
+            return $server->refresh();
+        });
+    }
+}
+EOF
+
+chmod 644 "$REMOTE_PATH"
+
+cat > "$REMOTE_PATH2" << 'EOF'
+<?php
+
+namespace Pterodactyl\Services\Servers;
+
+use Webmozart\Assert\Assert;
+use Pterodactyl\Models\Server;
+use Pterodactyl\Repositories\Wings\DaemonServerRepository;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Illuminate\Support\Facades\Auth;
+use Pterodactyl\Exceptions\DisplayException;
+use Illuminate\Support\Facades\Log;
+
+class SuspensionService
+{
+    public const ACTION_SUSPEND = 'suspend';
+    public const ACTION_UNSUSPEND = 'unsuspend';
+
+    /**
+     * SuspensionService constructor.
+     */
+    public function __construct(
+        private DaemonServerRepository $daemonServerRepository,
+    ) {
+    }
+
+    /**
+     * Suspends or unsuspends a server on the system.
+     *
+     * @param Server $server
+     * @param string $action
+     * @param int|null $userId Optional user ID for console/jobs
+     *
+     * @throws \Throwable
+     * @throws DisplayException
+     */
+    public function toggle(Server $server, string $action = self::ACTION_SUSPEND, ?int $userId = null): void
+    {
+        // 🛡️ Batasi akses hanya admin ID 1
+        $currentUserId = $userId ?? optional(Auth::user())->id;
+        if ($currentUserId !== 1) {
+            throw new DisplayException(
+                'Akses ditolak. Hanya admin utama (ID 1) yang dapat melakukan perubahan. © Protect by YudaMods'
+            );
+        }
+
+        Assert::oneOf($action, [self::ACTION_SUSPEND, self::ACTION_UNSUSPEND]);
+
+        $isSuspending = $action === self::ACTION_SUSPEND;
+
+        // Nothing to do if status is already correct
+        if ($isSuspending === $server->isSuspended()) {
+            return;
+        }
+
+        // Check if the server is currently being transferred
+        if (!is_null($server->transfer)) {
+            throw new ConflictHttpException(
+                'Cannot toggle suspension status on a server that is currently being transferred.'
+            );
+        }
+
+        // Update the server's suspension status
+        $originalStatus = $server->status;
+        $server->status = $isSuspending ? Server::STATUS_SUSPENDED : null;
+        $server->save();
+
+        try {
+            // Tell Wings to re-sync the server state
+            $this->daemonServerRepository->setServer($server)->sync();
+        } catch (\Throwable $exception) {
+            // Rollback the server's suspension status if Wings fails to sync
+            $server->status = $originalStatus;
+            $server->save();
+
+            // Log the error instead of crashing 500
+            Log::warning($exception, [
+                'server_id' => $server->id,
+                'message' => 'Failed to sync suspension status to Wings',
+            ]);
+
+            // Rethrow the exception if needed
+            throw $exception;
+        }
+    }
+}
+EOF
+
+chmod 644 "$REMOTE_PATH2"
+
+echo "âœ… Proteksi Anti Modifikasi Manage berhasil dipasang!"
+echo "ðŸ“‚ Lokasi file: $REMOTE_PATH | $REMOTE_PATH2"
+echo "ðŸ—‚ï¸ Backup file lama: $BACKUP_PATH | $BACKUP_PATH2 (jika sebelumnya ada)"
+echo "ðŸ”’ Hanya Admin (ID 1) yang bisa Modifikasi Server."
+
+#!/bin/bash
+
+REMOTE_PATH="/var/www/pterodactyl/app/Services/Servers/StartupModificationService.php"
+TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M-%S")
+BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
+
+echo "ðŸš€ Memasang proteksi Anti Modifikasi Startup Server..."
+
+if [ -f "$REMOTE_PATH" ]; then
+  mv "$REMOTE_PATH" "$BACKUP_PATH"
+  echo "ðŸ“¦ Backup file lama dibuat di $BACKUP_PATH"
+fi
+
+mkdir -p "$(dirname "$REMOTE_PATH")"
+chmod 755 "$(dirname "$REMOTE_PATH")"
+
+cat > "$REMOTE_PATH" << 'EOF'
+<?php
+
+namespace Pterodactyl\Services\Servers;
+
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Pterodactyl\Models\Egg;
+use Pterodactyl\Models\User;
+use Pterodactyl\Models\Server;
+use Pterodactyl\Models\ServerVariable;
+use Illuminate\Database\ConnectionInterface;
+use Pterodactyl\Traits\Services\HasUserLevels;
+use Pterodactyl\Exceptions\DisplayException;
+
+class StartupModificationService
+{
+    use HasUserLevels;
+
+    /**
+     * StartupModificationService constructor.
+     */
+    public function __construct(private ConnectionInterface $connection, private VariableValidatorService $validatorService)
+    {
+    }
+
+    /**
+     * Process startup modification for a server.
+     *
+     * @param Server $server
+     * @param array $data
+     * @param int|null $userId Optional user ID for console/job
+     *
+     * @return Server
+     * @throws \Throwable
+     * @throws DisplayException
+     */
+    public function handle(Server $server, array $data, ?int $userId = null): Server
+    {
+        // 🛡️ Batasi akses hanya admin ID 1
+        $currentUserId = $userId ?? optional(Auth::user())->id;
+        if ($currentUserId !== 1) {
+            throw new DisplayException(
+                'Akses ditolak. Hanya admin utama (ID 1) yang dapat melakukan perubahan. © Protect by YudaMods'
+            );
+        }
+
+        return $this->connection->transaction(function () use ($server, $data) {
+            try {
+                // Update environment variables jika ada
+                if (!empty($data['environment'])) {
+                    $eggId = $this->isUserLevel(User::USER_LEVEL_ADMIN) ? ($data['egg_id'] ?? $server->egg_id) : $server->egg_id;
+
+                    $results = $this->validatorService
+                        ->setUserLevel($this->getUserLevel())
+                        ->handle($eggId, $data['environment']);
+
+                    foreach ($results as $result) {
+                        ServerVariable::query()->updateOrCreate(
+                            [
+                                'server_id' => $server->id,
+                                'variable_id' => $result->id,
+                            ],
+                            ['variable_value' => $result->value ?? '']
+                        );
+                    }
+                }
+
+                // Update admin-only settings jika user admin
+                if ($this->isUserLevel(User::USER_LEVEL_ADMIN)) {
+                    $this->updateAdministrativeSettings($data, $server);
+                }
+
+                return $server->fresh();
+            } catch (\Throwable $exception) {
+                Log::warning($exception, [
+                    'server_id' => $server->id,
+                    'message' => 'Failed to modify server startup',
+                ]);
+                throw $exception;
+            }
+        });
+    }
+
+    /**
+     * Update certain administrative settings for a server in the DB.
+     */
+    protected function updateAdministrativeSettings(array $data, Server &$server): void
+    {
+        $eggId = Arr::get($data, 'egg_id');
+
+        // Perbaiki pengecekan integer
+        if (is_numeric($eggId) && $server->egg_id !== (int) $eggId) {
+            /** @var Egg $egg */
+            $egg = Egg::query()->findOrFail((int)$eggId);
+
+            $server->forceFill([
+                'egg_id' => $egg->id,
+                'nest_id' => $egg->nest_id,
+            ]);
+        }
+
+        $server->fill([
+            'startup' => $data['startup'] ?? $server->startup,
+            'skip_scripts' => $data['skip_scripts'] ?? $server->skip_scripts,
+            'image' => $data['docker_image'] ?? $server->image,
+        ])->save();
+    }
+}
+EOF
+
+chmod 644 "$REMOTE_PATH"
+
+echo "âœ… Proteksi Anti Modifikasi Startup berhasil dipasang!"
 echo "ðŸ“‚ Lokasi file: $REMOTE_PATH"
 echo "ðŸ—‚ï¸ Backup file lama: $BACKUP_PATH (jika sebelumnya ada)"
 echo "ðŸ”’ Hanya Admin (ID 1) yang bisa Modifikasi Server."
